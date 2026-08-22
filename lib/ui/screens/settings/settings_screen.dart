@@ -106,7 +106,7 @@ class SettingsScreen extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Wrap(
               spacing: 10,
-              children: const [0xFF7C4DFF, 0xFFE91E63, 0xFF03A9F4, 0xFF00C853, 0xFFFF9800, 0xFF607D8B]
+              children: const [0xFF10B981, 0xFF6EE7B7, 0xFF34D399, 0xFF03A9F4, 0xFF7C4DFF, 0xFFFF9800]
                   .map((c) => _AccentDot(
                         color: Color(c),
                         selected: settings.accentColor == c,

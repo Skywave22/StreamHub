@@ -3,8 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/errors/app_exception.dart';
 import '../../../core/providers.dart';
-import '../../../providers/plugin_installer.dart';
-import '../../../providers/url_validation.dart';
+import '../../../providers/extensions/repository_service.dart';
+
+enum _Mode { repository, addon }
 
 class AddPluginScreen extends ConsumerStatefulWidget {
   const AddPluginScreen({super.key});
@@ -15,17 +16,21 @@ class AddPluginScreen extends ConsumerStatefulWidget {
 
 class _AddPluginScreenState extends ConsumerState<AddPluginScreen> {
   final TextEditingController _controller = TextEditingController();
+  _Mode _mode = _Mode.repository;
   bool _busy = false;
   String? _error;
-  InstallOutcome? _success;
+  String? _success;
 
   String? get _validationError {
     final text = _controller.text.trim();
     if (text.isEmpty) return null;
-    if (!text.startsWith('http')) {
-      return ShortCodeResolverValid.validFormat(text) ? null : 'Short codes use letters and numbers only.';
+    if (_mode == _Mode.repository) {
+      if (RepositoryService.looksLikeShortCode(text)) return null;
+      if (text.startsWith('https://')) return null;
+      return 'Enter a SkyStream short code or an HTTPS repository URL.';
     }
-    return UrlValidation.error(text);
+    if (!text.startsWith('https://')) return 'Enter an HTTPS addon manifest URL.';
+    return null;
   }
 
   Future<void> _install() async {
@@ -37,23 +42,25 @@ class _AddPluginScreenState extends ConsumerState<AddPluginScreen> {
       _success = null;
     });
     try {
-      final outcome = await ref.read(pluginManagerProvider).install(input);
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _success = outcome;
-      });
+      if (_mode == _Mode.repository) {
+        final repo = await ref.read(extensionManagerProvider).addRepository(input);
+        setState(() => _success = 'Repository "${repo.name}" added. Browse it to install extensions.');
+      } else {
+        final addon = await ref.read(addonManagerProvider).addAddon(input);
+        setState(() => _success = 'Addon "${addon.manifest.name}" added.');
+      }
+      if (mounted) setState(() => _busy = false);
     } on AppException catch (e) {
       if (!mounted) return;
       setState(() {
         _busy = false;
         _error = e.message;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = 'Plugin installation failed.';
+        _error = 'Could not add the plugin.';
       });
     }
   }
@@ -67,23 +74,41 @@ class _AddPluginScreenState extends ConsumerState<AddPluginScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          SegmentedButton<_Mode>(
+            segments: const [
+              ButtonSegment(value: _Mode.repository, icon: Icon(Icons.hub_outlined), label: Text('Repository / short code')),
+              ButtonSegment(value: _Mode.addon, icon: Icon(Icons.extension_outlined), label: Text('Stremio / Nuvio addon')),
+            ],
+            selected: {_mode},
+            onSelectionChanged: (s) => setState(() => _mode = s.first),
+          ),
+          const SizedBox(height: 16),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Raw plugin URL', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  Text(
+                    _mode == _Mode.repository
+                        ? 'SkyStream / CloudStream repository'
+                        : 'Stremio-compatible addon',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                  ),
                   const SizedBox(height: 4),
-                  Text('Enter a legitimate HTTPS plugin URL, or a SkyStream short code.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                  Text(
+                    _mode == _Mode.repository
+                        ? 'Enter a SkyStream short code (e.g. "hexated") or a repository URL.'
+                        : 'Enter an addon manifest URL (https://…/manifest.json).',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _controller,
                     enabled: !_busy,
                     onChanged: (_) => setState(() {}),
                     decoration: InputDecoration(
-                      hintText: 'https://…  or  short code',
+                      hintText: _mode == _Mode.repository ? 'short code or https://…' : 'https://…/manifest.json',
                       prefixIcon: const Icon(Icons.link),
                       errorText: validationError,
                     ),
@@ -94,7 +119,7 @@ class _AddPluginScreenState extends ConsumerState<AddPluginScreen> {
                     icon: _busy
                         ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.download_outlined),
-                    label: Text(_busy ? 'Installing…' : 'Validate & Install'),
+                    label: Text(_busy ? 'Adding…' : 'Add'),
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 12),
@@ -112,20 +137,11 @@ class _AddPluginScreenState extends ConsumerState<AddPluginScreen> {
                     const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
                       child: Row(children: [
                         const Icon(Icons.check_circle, color: Colors.green),
                         const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '${_success!.plugin.name} v${_success!.plugin.version} installed '
-                            '${_success!.checksumVerified ? '(checksum verified)' : ''}',
-                            style: const TextStyle(color: Colors.green),
-                          ),
-                        ),
+                        Expanded(child: Text(_success!, style: const TextStyle(color: Colors.green))),
                       ]),
                     ),
                   ],
@@ -140,18 +156,13 @@ class _AddPluginScreenState extends ConsumerState<AddPluginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(children: [
-                    Icon(Icons.shield_outlined),
-                    SizedBox(width: 8),
-                    Text('How plugins are handled', style: TextStyle(fontWeight: FontWeight.w700)),
-                  ]),
+                  Row(children: [Icon(Icons.shield_outlined), SizedBox(width: 8), Text('How plugins run', style: TextStyle(fontWeight: FontWeight.w700))]),
                   SizedBox(height: 8),
                   Text(
-                    '• Only HTTPS URLs are accepted.\n'
-                    '• Manifests are validated (id, name, version, platforms).\n'
-                    '• Checksums/signatures are verified when provided.\n'
-                    '• Plugin code is never executed by the core app.\n'
-                    '• Plugins can be disabled, updated, reloaded or removed at any time.',
+                    '• Repositories and addon manifests are fetched and validated.\n'
+                    '• Extensions are JavaScript and run in an isolated QuickJS engine.\n'
+                    '• Plugin checksums are verified when repositories declare them.\n'
+                    '• Everything can be disabled, updated or removed at any time.',
                   ),
                 ],
               ),
@@ -161,9 +172,4 @@ class _AddPluginScreenState extends ConsumerState<AddPluginScreen> {
       ),
     );
   }
-}
-
-// Small helper to avoid importing the resolver here.
-abstract final class ShortCodeResolverValid {
-  static bool validFormat(String code) => RegExp(r'^[a-zA-Z0-9!_-]+$').hasMatch(code.trim());
 }

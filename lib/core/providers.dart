@@ -1,6 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app_dependencies.dart';
+import '../providers/addons/addon_manager.dart';
+import '../providers/addons/addon_service.dart';
+import '../providers/extensions/extension_manager.dart';
+import '../providers/extensions/repository_service.dart';
 import '../providers/plugin_manager.dart';
 import '../services/playback_controller.dart';
 import '../services/playback_engine.dart';
@@ -23,3 +27,7 @@ final searchServiceProvider = Provider<SearchService>((ref) => ref.watch(depsPro
 final playbackControllerProvider = Provider<PlaybackController>((ref) => ref.watch(depsProvider).playbackController);
 final playbackEngineProvider = Provider<PlaybackEngine>((ref) => ref.watch(depsProvider).playbackEngine);
 final sourceResolverProvider = Provider<SourceResolver>((ref) => SourceResolver(pluginManager: ref.watch(pluginManagerProvider)));
+final repositoryServiceProvider = Provider<RepositoryService>((ref) => ref.watch(depsProvider).repositoryService);
+final extensionManagerProvider = Provider<ExtensionManager>((ref) => ref.watch(depsProvider).extensionManager);
+final addonServiceProvider = Provider<AddonService>((ref) => ref.watch(depsProvider).addonService);
+final addonManagerProvider = Provider<AddonManager>((ref) => ref.watch(depsProvider).addonManager);

@@ -129,7 +129,22 @@ class PluginManager extends ChangeNotifier {
   }
 
   List<StreamProvider> activeProviders(AppPlatform platform) {
-    return active(platform).map((p) => provider(p.id)).whereType<StreamProvider>().toList();
+    final bundled =
+        active(platform).map((p) => provider(p.id)).whereType<StreamProvider>().toList();
+    return [...bundled, ...(extraProviders?.call() ?? const <StreamProvider>[])];
+  }
+
+  /// Additional providers contributed by the extension/addon managers.
+  List<StreamProvider> Function()? extraProviders;
+
+  /// Finds a provider by its id across bundled and contributed providers.
+  StreamProvider? findProvider(String id, AppPlatform platform) {
+    final bundled = provider(id);
+    if (bundled != null) return bundled;
+    for (final p in extraProviders?.call() ?? const <StreamProvider>[]) {
+      if (p.id == id) return p;
+    }
+    return null;
   }
 
   // ---- Lifecycle -----------------------------------------------------------

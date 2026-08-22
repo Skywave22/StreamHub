@@ -31,7 +31,7 @@ class SettingsStore extends ChangeNotifier {
       ThemePreference.values.asNameMap()[_prefs.getString(kTheme)] ?? ThemePreference.system;
   set themePreference(ThemePreference v) => _set(kTheme, v.name);
 
-  int get accentColor => _prefs.getInt(kAccent) ?? 0xFF7C4DFF;
+  int get accentColor => _prefs.getInt(kAccent) ?? 0xFF10B981; // SkyStream green
   set accentColor(int v) => _setInt(kAccent, v);
 
   UiDensity get density => UiDensity.values.asNameMap()[_prefs.getString(kDensity)] ?? UiDensity.comfortable;

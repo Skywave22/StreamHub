@@ -41,14 +41,28 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
     _load();
   }
 
+  bool get _isExternal => widget.mediaId.startsWith('ext:') || widget.mediaId.startsWith('addon:');
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final tmdb = ref.read(tmdbServiceProvider);
-      final details = await tmdb.getDetails(widget.mediaId);
+      MediaDetails? details;
+      if (_isExternal) {
+        final pm = ref.read(pluginManagerProvider);
+        final parts = widget.mediaId.split(':');
+        final providerId = parts.length >= 2 ? '${parts[0]}:${parts[1]}' : '';
+        final provider = pm.findProvider(providerId, currentPlatform());
+        if (provider == null) {
+          throw const AppException(AppErrorKind.pluginNotFound, message: 'The provider for this title is not installed.');
+        }
+        details = await provider.getDetails(widget.mediaId);
+      } else {
+        final tmdb = ref.read(tmdbServiceProvider);
+        details = await tmdb.getDetails(widget.mediaId);
+      }
       if (!mounted) return;
       setState(() {
         _details = details;
@@ -73,6 +87,14 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
       _loadingEpisodes = true;
     });
     try {
+      if (_isExternal) {
+        final all = _details?.episodes ?? const <Episode>[];
+        setState(() {
+          _episodes = all.where((e) => e.seasonNumber == season).toList();
+          _loadingEpisodes = false;
+        });
+        return;
+      }
       final tmdb = ref.read(tmdbServiceProvider);
       final episodes = await tmdb.getEpisodes(widget.mediaId, season);
       if (!mounted) return;
@@ -114,7 +136,7 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
 
   Future<void> _resolveAndPlay(MediaSource source, {int? season, int? episode, String? episodeName}) async {
     try {
-      final provider = ref.read(pluginManagerProvider).provider(source.providerId);
+      final provider = ref.read(pluginManagerProvider).findProvider(source.providerId, currentPlatform());
       final verified = provider != null ? await provider.resolveSource(source) : source;
       if (!mounted) return;
       final details = _details!;

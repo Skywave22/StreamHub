@@ -6,6 +6,10 @@ import 'core/networking/cache_store.dart';
 import 'core/storage/library_store.dart';
 import 'core/storage/secure_storage.dart';
 import 'core/storage/settings_store.dart';
+import 'providers/addons/addon_manager.dart';
+import 'providers/addons/addon_service.dart';
+import 'providers/extensions/extension_manager.dart';
+import 'providers/extensions/repository_service.dart';
 import 'providers/integrations/cloudstream_provider.dart';
 import 'providers/integrations/nuvio_provider.dart';
 import 'providers/integrations/skystream_provider.dart';
@@ -36,6 +40,10 @@ class AppDependencies {
     required this.searchService,
     required this.playbackController,
     required this.playbackEngine,
+    required this.repositoryService,
+    required this.extensionManager,
+    required this.addonService,
+    required this.addonManager,
   });
 
   final ApiClient apiClient;
@@ -52,6 +60,10 @@ class AppDependencies {
   final SearchService searchService;
   final PlaybackController playbackController;
   final PlaybackEngine playbackEngine;
+  final RepositoryService repositoryService;
+  final ExtensionManager extensionManager;
+  final AddonService addonService;
+  final AddonManager addonManager;
 
   /// Builds the full dependency graph. [hiveDir] is used for tests to target a
   /// temporary directory; [engineFactory] lets tests inject a no-op engine.
@@ -65,6 +77,10 @@ class AppDependencies {
     final pluginsBox = await Hive.openBox<String>('plugins');
     final cacheBox = await Hive.openBox<String>('cache');
     final libraryBox = await Hive.openBox<String>('library');
+    final extRepoBox = await Hive.openBox<String>('ext_repos');
+    final extPluginBox = await Hive.openBox<String>('ext_plugins');
+    final extDataBox = await Hive.openBox<String>('ext_data');
+    final addonsBox = await Hive.openBox<String>('addons');
 
     final api = ApiClient();
     final cache = CacheStore(cacheBox);
@@ -76,6 +92,17 @@ class AppDependencies {
     final shortCodes = ShortCodeResolver(api: api);
     final installer = PluginInstaller(api: api, shortCodes: shortCodes);
     final engine = ProbeSourceEngine(api);
+
+    final repositoryService = RepositoryService(api: api);
+    final extensionManager = ExtensionManager(
+      repoBox: extRepoBox,
+      pluginBox: extPluginBox,
+      dataBox: extDataBox,
+      repositoryService: repositoryService,
+      api: api,
+    );
+    final addonService = AddonService(api: api);
+    final addonManager = AddonManager(box: addonsBox, service: addonService, api: api);
 
     final registry = ProviderRegistry();
     late final PluginManager pluginManager;
@@ -111,6 +138,11 @@ class AppDependencies {
       engine: engine,
     );
     await pluginManager.ensureSeeded();
+    // Contributed providers: real JS extensions + Stremio/Nuvio addons.
+    pluginManager.extraProviders = () => [
+          ...extensionManager.enabledProviders(),
+          ...addonManager.enabledProviders(),
+        ];
 
     final search = SearchService(pluginManager: pluginManager);
     final playbackController = PlaybackController(libraryStore: library, settings: settings);
@@ -131,6 +163,10 @@ class AppDependencies {
       searchService: search,
       playbackController: playbackController,
       playbackEngine: playbackEngine,
+      repositoryService: repositoryService,
+      extensionManager: extensionManager,
+      addonService: addonService,
+      addonManager: addonManager,
     );
   }
 }

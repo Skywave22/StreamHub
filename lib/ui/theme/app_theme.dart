@@ -15,7 +15,7 @@ abstract final class AppTheme {
       colorScheme: scheme,
       visualDensity: densityValue,
       brightness: brightness,
-      scaffoldBackgroundColor: isDark ? const Color(0xFF0D0D12) : const Color(0xFFF6F6FA),
+      scaffoldBackgroundColor: isDark ? const Color(0xFF0F0F13) : const Color(0xFFF5F1EC),
       appBarTheme: AppBarTheme(
         elevation: 0,
         centerTitle: false,
@@ -24,7 +24,7 @@ abstract final class AppTheme {
       ),
       cardTheme: CardThemeData(
         elevation: 0,
-        color: isDark ? const Color(0xFF17171F) : Colors.white,
+        color: isDark ? const Color(0xFF18181F) : Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         margin: EdgeInsets.zero,
       ),

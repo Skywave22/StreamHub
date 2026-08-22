@@ -1,7 +1,7 @@
 name: streamhub
 description: "StreamHub - a fast, modern cross-platform streaming application with a modular provider/plugin architecture."
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: ^3.11.0
@@ -42,6 +42,8 @@ dependencies:
   wakelock_plus: ^1.4.0
   crypto: ^3.0.6
   intl: ^0.20.2
+  flutter_js: ^0.8.5
+  html: ^0.15.6
 
 dev_dependencies:
   flutter_test:

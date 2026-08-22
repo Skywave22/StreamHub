@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: '3.47.1'
+
+jobs:
+  lint-test:
+    name: Lint & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgtk-3-dev libmpv-dev libsecret-1-dev libjsoncpp-dev clang cmake pkg-config
+      - run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Test
+        run: flutter test
+
+  build-android:
+    name: Build Android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+      - uses: android-actions/setup-android@v3
+      - run: flutter pub get
+      - name: Build APK
+        run: flutter build apk --release
+      - name: Build AAB
+        run: flutter build appbundle --release
+      - name: Checksums
+        run: |
+          cd build/app/outputs/flutter-apk
+          sha256sum app-release.apk > app-release.apk.sha256
+          cd ../bundle/release
+          sha256sum app-release.aab > app-release.aab.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-artifacts
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/app-release.apk.sha256
+            build/app/outputs/bundle/release/app-release.aab
+            build/app/outputs/bundle/release/app-release.aab.sha256
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+      - run: flutter pub get
+      - name: Build Windows
+        run: flutter build windows --release
+      - name: Package
+        shell: pwsh
+        run: |
+          $src = "build/windows/x64/runner/Release"
+          $zip = "streamhub-windows-x64.zip"
+          Compress-Archive -Path "$src/*" -DestinationPath $zip
+          (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLower() | Out-File -Encoding ascii "$zip.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts
+          path: |
+            streamhub-windows-x64.zip
+            streamhub-windows-x64.zip.sha256
+
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgtk-3-dev libmpv-dev libsecret-1-dev libjsoncpp-dev clang cmake pkg-config dpkg-dev
+      - run: flutter pub get
+      - name: Build Linux
+        run: flutter build linux --release
+      - name: Package
+        run: |
+          set -e
+          BUNDLE=build/linux/x64/release/bundle
+          tar -czf streamhub-linux-x64.tar.gz -C "$BUNDLE" .
+          sha256sum streamhub-linux-x64.tar.gz > streamhub-linux-x64.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifacts
+          path: |
+            streamhub-linux-x64.tar.gz
+            streamhub-linux-x64.tar.gz.sha256
+
+  release:
+    name: Create GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [lint-test, build-android, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Checksums for all artifacts
+        run: |
+          cd artifacts
+          for f in $(find . -type f ! -name '*.sha256'); do
+            (cd "$(dirname "$f")" && sha256sum "$(basename "$f")" > "$(basename "$f").sha256")
+          done
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true
